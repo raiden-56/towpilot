@@ -1,0 +1,75 @@
+# TowPilot — full stack for local production-like runs and small pilots.
+#   cp .env.docker.example .env.docker   # then edit secrets
+#   docker compose --env-file .env.docker up -d --build
+#   docker compose exec -e BOOTSTRAP_ADMIN_PASSWORD=... api node dist/cli/bootstrap-admin.js --email you@company.in --phone 98xxxxxxxx --name "Your Name"
+#
+# Ports are bound to 127.0.0.1 and use non-default host ports to avoid clashing with other
+# local projects. Put a TLS-terminating reverse proxy in front for real deployments.
+name: towpilot
+
+services:
+  db:
+    image: postgis/postgis:16-3.4-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: towpilot
+      POSTGRES_USER: towpilot
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_INITDB_ARGS: --encoding=UTF8 --locale=C
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:${DB_HOST_PORT:-55432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U towpilot -d towpilot"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    env_file: .env.docker
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      DATABASE_URL: postgresql://towpilot:${POSTGRES_PASSWORD}@db:5432/towpilot?schema=public
+      REDIS_URL: redis://redis:6379
+      STORAGE_LOCAL_DIR: /app/storage
+      TRUST_PROXY: "true"
+    volumes:
+      - uploads:/app/storage
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_MAP_TILE_URL: ${VITE_MAP_TILE_URL:-}
+        VITE_MAP_ATTRIBUTION: ${VITE_MAP_ATTRIBUTION:-}
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${WEB_HOST_PORT:-8088}:80"
+    depends_on:
+      - api
+
+volumes:
+  db-data:
+  redis-data:
+  uploads:

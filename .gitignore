@@ -1,0 +1,14 @@
+node_modules/
+dist/
+coverage/
+*.log
+.env
+.env.*
+!.env.example
+!.env.*.example
+apps/api/.local-pg/
+apps/api/storage/
+apps/web/test-results/
+apps/api/storage-test/
+playwright-report/
+.DS_Store

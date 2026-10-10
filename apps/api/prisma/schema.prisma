@@ -1,0 +1,1893 @@
+// TowPilot data model.
+// Conventions:
+//  * All money is stored as integer paise (1 INR = 100 paise) to avoid float rounding.
+//  * All timestamps are stored in UTC (timestamptz) and converted to the configured
+//    display timezone (default Asia/Kolkata) at the edge.
+//  * Financial records are never silently edited once settled; corrections are made
+//    through compensating records (credit notes, refunds, adjustments).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ───────────────────────────── Enums ─────────────────────────────
+
+enum UserStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+  DEACTIVATED
+}
+
+enum VerificationStatus {
+  PENDING
+  DOCUMENTS_REQUESTED
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum EmploymentType {
+  SALARIED
+  COMMISSION
+  JOB_BASED
+  PARTNER
+}
+
+enum PayFrequency {
+  WEEKLY
+  MONTHLY
+  ANNUAL
+}
+
+enum VehicleClass {
+  TWO_WHEELER
+  HATCHBACK
+  SEDAN
+  SUV
+  PREMIUM
+  LCV
+  HCV
+}
+
+enum FuelType {
+  PETROL
+  DIESEL
+  CNG
+  LPG
+  ELECTRIC
+  HYBRID
+  OTHER
+}
+
+enum ServiceKind {
+  TOWING
+  ONSITE
+}
+
+enum TruckType {
+  FLATBED
+  WHEEL_LIFT
+  HEAVY_DUTY
+  BIKE_CARRIER
+  SERVICE_VAN
+}
+
+enum TruckStatus {
+  AVAILABLE
+  IN_USE
+  MAINTENANCE
+  OUT_OF_SERVICE
+  RETIRED
+}
+
+enum EquipmentType {
+  WINCH
+  DOLLIES
+  GO_JACKS
+  WHEEL_SKATES
+  WHEEL_LIFT
+  FLATBED_DECK
+  JUMP_STARTER
+  TYRE_KIT
+  FUEL_CAN
+  LOCKOUT_KIT
+  EV_SAFE_KIT
+  RECOVERY_STRAPS
+  SAFETY_CONES
+}
+
+enum EquipmentStatus {
+  OK
+  DAMAGED
+  MISSING
+}
+
+enum AvailabilityStatus {
+  AVAILABLE
+  BUSY
+  ON_JOB
+  ON_BREAK
+  OFF_DUTY
+}
+
+enum BookingStatus {
+  REQUESTED
+  QUOTED
+  CONFIRMED
+  SEARCHING_FOR_PROVIDER
+  ASSIGNED
+  ACCEPTED
+  EN_ROUTE
+  ARRIVED
+  INSPECTING
+  RECOVERY_AUTHORIZED
+  LOADING
+  IN_TRANSIT
+  DELIVERED
+  COMPLETED
+  REJECTED
+  REASSIGNMENT_REQUIRED
+  CANCELLED
+  FAILED
+  CUSTOMER_UNAVAILABLE
+  SAFETY_HOLD
+  DISPUTED
+}
+
+enum BookingType {
+  EMERGENCY
+  SCHEDULED
+}
+
+enum BookingPriority {
+  NORMAL
+  HIGH
+  CRITICAL
+}
+
+enum LocationKind {
+  PICKUP
+  DROPOFF
+}
+
+enum LocationSource {
+  GPS
+  MAP_PIN
+  MANUAL
+  LINK
+  SAVED
+}
+
+enum DestinationType {
+  GARAGE
+  SERVICE_CENTRE
+  HOME
+  CUSTOM
+}
+
+enum TriState {
+  YES
+  NO
+  NOT_SURE
+}
+
+enum BreakdownType {
+  MECHANICAL
+  COLLISION
+  ENGINE
+  BATTERY
+  TYRE
+  TRANSMISSION
+  FLOOD
+  FUEL
+  LOCKOUT
+  OTHER
+}
+
+enum AccessRestriction {
+  NONE
+  BASEMENT
+  NARROW_LANE
+  PARKING_STRUCTURE
+  RESTRICTED_AREA
+}
+
+enum AttachmentKind {
+  DAMAGE_PHOTO
+  DAMAGE_VIDEO
+  PICKUP_EVIDENCE
+  DELIVERY_EVIDENCE
+  TOLL_RECEIPT
+  INCIDENT
+  VEHICLE_PHOTO
+  OTHER
+}
+
+enum QuoteKind {
+  INITIAL
+  REVISION
+}
+
+enum QuoteStatus {
+  PENDING_INTERNAL_APPROVAL
+  PENDING_CUSTOMER_APPROVAL
+  APPROVED
+  REJECTED
+  EXPIRED
+  SUPERSEDED
+}
+
+enum AssignmentStatus {
+  OFFERED
+  ACCEPTED
+  REJECTED
+  TIMED_OUT
+  CANCELLED
+  RELEASED
+  COMPLETED
+}
+
+enum AssignmentMethod {
+  AUTO
+  MANUAL
+}
+
+enum TeamRole {
+  TEAM_LEADER
+  DRIVER
+  RECOVERY_WORKER
+}
+
+enum ActorRole {
+  CUSTOMER
+  DRIVER
+  WORKER
+  DISPATCHER
+  ADMIN
+  SYSTEM
+}
+
+enum ConditionStage {
+  PICKUP
+  DELIVERY
+}
+
+enum CustodyStage {
+  PICKUP
+  HANDOVER
+}
+
+enum CustodyMethod {
+  OTP
+  AUTHORIZED_OVERRIDE
+}
+
+enum InvoiceType {
+  SERVICE
+  CANCELLATION
+  MEMBERSHIP
+}
+
+enum InvoiceStatus {
+  ISSUED
+  VOID
+}
+
+enum PaymentStatus {
+  UNPAID
+  PAYMENT_PENDING
+  PARTIALLY_PAID
+  PAID
+  PAYMENT_FAILED
+  REFUND_PENDING
+  PARTIALLY_REFUNDED
+  REFUNDED
+  DISPUTED
+}
+
+enum PaymentMethod {
+  ONLINE
+  CASH
+  BANK_TRANSFER
+  PREPAID_CREDIT
+}
+
+enum PaymentProvider {
+  RAZORPAY
+  SANDBOX
+  MANUAL
+}
+
+enum PaymentTxnStatus {
+  CREATED
+  PENDING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+enum WebhookStatus {
+  RECEIVED
+  PROCESSED
+  IGNORED
+  FAILED
+}
+
+enum RefundStatus {
+  REQUESTED
+  APPROVED
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  REJECTED
+}
+
+enum ExpenseCategory {
+  FUEL
+  MAINTENANCE
+  REPAIR
+  EQUIPMENT
+  RENTAL
+  MARKETING
+  INSURANCE
+  TOLLS_PARKING
+  OFFICE
+  SOFTWARE
+  OTHER
+}
+
+enum ExpenseSource {
+  DIRECT
+  VENDOR_BILL
+  EMPLOYEE_CLAIM
+}
+
+enum ExpenseStatus {
+  SUBMITTED
+  APPROVED
+  REJECTED
+  PAID
+}
+
+enum SalaryStatus {
+  ACCRUED
+  APPROVED
+  PAID
+  CANCELLED
+}
+
+enum EarningKind {
+  JOB_FIXED
+  JOB_COMMISSION
+  INCENTIVE
+  DEDUCTION
+  REIMBURSEMENT
+}
+
+enum EarningStatus {
+  PENDING
+  IN_PAYOUT
+  VOID
+}
+
+enum PayoutStatus {
+  DRAFT
+  APPROVED
+  PAID
+  CANCELLED
+}
+
+enum AdjustmentType {
+  WRITE_OFF
+  ROUNDING
+  CORRECTION
+}
+
+enum SubscriptionStatus {
+  PENDING_PAYMENT
+  ACTIVE
+  EXPIRED
+  CANCELLED
+}
+
+enum NotificationChannel {
+  IN_APP
+  SMS
+  EMAIL
+  PUSH
+}
+
+enum DeliveryStatus {
+  PENDING
+  SENT
+  FAILED
+  SKIPPED
+}
+
+enum TicketCategory {
+  GENERAL
+  COMPLAINT
+  BILLING_DISPUTE
+  REFUND_REQUEST
+  PRIVACY_REQUEST
+  PERFORMANCE_CHALLENGE
+  SAFETY
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  AWAITING_CUSTOMER
+  RESOLVED
+  CLOSED
+}
+
+enum IncidentType {
+  UNSAFE_LOCATION
+  ACCIDENT
+  EQUIPMENT_DAMAGE
+  DISPUTE
+  CUSTOMER_UNAVAILABLE
+  INJURY
+  OTHER
+}
+
+enum Severity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum IncidentStatus {
+  OPEN
+  ACKNOWLEDGED
+  RESOLVED
+}
+
+enum EscalationType {
+  DRIVER_REJECTED
+  DRIVER_NO_RESPONSE
+  MISSED_ETA
+  VEHICLE_UNAVAILABLE
+  LOCATION_STALE
+  CUSTOMER_CANNOT_CONTACT
+  NO_PROVIDER
+  SAFETY
+  MANUAL_REVIEW
+}
+
+enum EscalationStatus {
+  OPEN
+  ACKNOWLEDGED
+  RESOLVED
+}
+
+enum DocumentType {
+  ID_PROOF
+  DRIVING_LICENCE
+  PHOTO
+  ADDRESS_PROOF
+  TRAINING_CERTIFICATE
+  OTHER
+}
+
+enum DocumentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum MaintenanceType {
+  SERVICE
+  REPAIR
+  INSPECTION
+  BREAKDOWN
+}
+
+enum JobStatus {
+  PENDING
+  RUNNING
+  DONE
+  FAILED
+  DEAD
+}
+
+// ───────────────────────── Identity & access ─────────────────────────
+
+model User {
+  id           String     @id @default(cuid())
+  phone        String?    @unique
+  email        String?    @unique
+  passwordHash String?
+  fullName     String
+  status       UserStatus @default(ACTIVE)
+  photoKey     String?
+  isSample     Boolean    @default(false)
+  lastLoginAt  DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  deletedAt    DateTime?
+
+  roles              UserRole[]
+  sessions           Session[]
+  customerProfile    CustomerProfile?
+  workerProfile      WorkerProfile?
+  driverProfile      DriverProfile?
+  availability       DriverAvailability?
+  vehicles           Vehicle[]
+  savedAddresses     SavedAddress[]
+  emergencyContacts  EmergencyContact[]
+  bookings           Booking[]           @relation("BookingCustomer")
+  assignments        BookingAssignment[]
+  teamMemberships    BookingTeamMember[]
+  documents          EmployeeDocument[]  @relation("DocumentOwner")
+  notifications      Notification[]
+  ratingsGiven       Rating[]            @relation("RatingRater")
+  ratingsReceived    Rating[]            @relation("RatingRatee")
+  tickets            SupportTicket[]     @relation("TicketOwner")
+  assignedTruck      TowTruck?           @relation("TruckDriver")
+  salaryRecords      SalaryRecord[]
+  earnings           DriverEarning[]
+  payouts            DriverPayout[]
+  availabilityLogs   AvailabilityLog[]
+  fleetMemberships   FleetAccountMember[]
+  subscriptions      MembershipSubscription[]
+
+  @@index([status])
+  @@map("users")
+}
+
+model Role {
+  id          String           @id @default(cuid())
+  key         String           @unique
+  name        String
+  description String?
+  isSystem    Boolean          @default(true)
+  permissions RolePermission[]
+  users       UserRole[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String           @id @default(cuid())
+  key         String           @unique
+  description String?
+  roles       RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model UserRole {
+  userId    String
+  roleId    String
+  grantedBy String?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}
+
+model Session {
+  id               String    @id @default(cuid())
+  userId           String
+  refreshTokenHash String    @unique
+  userAgent        String?
+  ip               String?
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  replacedById     String?
+  createdAt        DateTime  @default(now())
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model OtpChallenge {
+  id        String    @id @default(cuid())
+  phone     String
+  purpose   String
+  codeHash  String
+  attempts  Int       @default(0)
+  expiresAt DateTime
+  usedAt    DateTime?
+  ip        String?
+  createdAt DateTime  @default(now())
+
+  @@index([phone, purpose, createdAt])
+  @@map("otp_challenges")
+}
+
+// ───────────────────────────── Customers ─────────────────────────────
+
+model CustomerProfile {
+  id                 String    @id @default(cuid())
+  userId             String    @unique
+  preferredLanguage  String    @default("en")
+  termsAcceptedAt    DateTime?
+  privacyConsentAt   DateTime?
+  consentVersion     String?
+  marketingConsent   Boolean   @default(false)
+  locationConsent    Boolean   @default(false)
+  notifySms          Boolean   @default(true)
+  notifyEmail        Boolean   @default(true)
+  notifyPush         Boolean   @default(true)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("customer_profiles")
+}
+
+model SavedAddress {
+  id        String   @id @default(cuid())
+  userId    String
+  label     String
+  address   String
+  lat       Float
+  lng       Float
+  landmark  String?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("saved_addresses")
+}
+
+model EmergencyContact {
+  id           String   @id @default(cuid())
+  userId       String
+  name         String
+  phone        String
+  relationship String?
+  createdAt    DateTime @default(now())
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("emergency_contacts")
+}
+
+model Vehicle {
+  id                 String       @id @default(cuid())
+  ownerUserId        String
+  fleetAccountId     String?
+  vehicleClass       VehicleClass
+  registrationNumber String
+  make               String
+  model              String
+  fuelType           FuelType
+  color              String?
+  year               Int?
+  photoKeys          String[]
+  isSample           Boolean      @default(false)
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+  deletedAt          DateTime?
+  owner              User         @relation(fields: [ownerUserId], references: [id])
+  fleetAccount       FleetAccount? @relation(fields: [fleetAccountId], references: [id])
+  bookings           Booking[]
+
+  @@index([ownerUserId])
+  @@index([registrationNumber])
+  @@map("vehicles")
+}
+
+// ───────────────────────────── Workforce ─────────────────────────────
+
+model WorkerProfile {
+  id                    String             @id @default(cuid())
+  userId                String             @unique
+  employeeCode          String             @unique
+  partnerCompany        String?
+  employmentType        EmploymentType     @default(SALARIED)
+  payFrequency          PayFrequency?
+  baseSalary            Int?
+  commissionBps         Int?
+  perJobAmount          Int?
+  verificationStatus    VerificationStatus @default(PENDING)
+  verificationNote      String?
+  verifiedById          String?
+  verifiedAt            DateTime?
+  skills                String[]
+  trainingNotes         String?
+  emergencyContactName  String?
+  emergencyContactPhone String?
+  payoutMethod          String?
+  payoutDetailsMasked   String?
+  joinedAt              DateTime           @default(now())
+  isSample              Boolean            @default(false)
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+  user                  User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  zones                 ServiceZone[]      @relation("WorkerZones")
+
+  @@index([verificationStatus])
+  @@map("worker_profiles")
+}
+
+model DriverProfile {
+  id                String    @id @default(cuid())
+  userId            String    @unique
+  licenceNumberMask String
+  licenceClass      String
+  licenceExpiry     DateTime
+  canLeadTeam       Boolean   @default(true)
+  heavyVehicleCert  Boolean   @default(false)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("driver_profiles")
+}
+
+model EmployeeDocument {
+  id           String         @id @default(cuid())
+  userId       String
+  type         DocumentType
+  numberMasked String?
+  storageKey   String
+  mimeType     String
+  expiresAt    DateTime?
+  status       DocumentStatus @default(PENDING)
+  reviewedById String?
+  reviewNote   String?
+  reviewedAt   DateTime?
+  createdAt    DateTime       @default(now())
+  user         User           @relation("DocumentOwner", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("employee_documents")
+}
+
+model DriverAvailability {
+  id              String             @id @default(cuid())
+  userId          String             @unique
+  status          AvailabilityStatus @default(OFF_DUTY)
+  zoneId          String?
+  lastLat         Float?
+  lastLng         Float?
+  lastAccuracyM   Float?
+  lastLocationAt  DateTime?
+  locationSharing Boolean            @default(false)
+  statusSince     DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  user            User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  zone            ServiceZone?       @relation(fields: [zoneId], references: [id])
+
+  @@index([status, zoneId])
+  @@map("driver_availability")
+}
+
+model AvailabilityLog {
+  id        String             @id @default(cuid())
+  userId    String
+  status    AvailabilityStatus
+  zoneId    String?
+  startedAt DateTime           @default(now())
+  endedAt   DateTime?
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, startedAt])
+  @@map("availability_logs")
+}
+
+// ───────────────────────────── Fleet ─────────────────────────────
+
+model TowTruck {
+  id                    String          @id @default(cuid())
+  registrationNumber    String          @unique
+  truckType             TruckType
+  make                  String
+  model                 String
+  maxLoadKg             Int
+  maxVehicleClass       VehicleClass
+  status                TruckStatus     @default(AVAILABLE)
+  zoneId                String?
+  assignedDriverUserId  String?         @unique
+  odometerKm            Int             @default(0)
+  lastServiceAt         DateTime?
+  lastServiceOdometerKm Int?
+  serviceIntervalKm     Int             @default(10000)
+  serviceIntervalDays   Int             @default(180)
+  insuranceExpiry       DateTime?
+  fitnessExpiry         DateTime?
+  permitExpiry          DateTime?
+  pucExpiry             DateTime?
+  nextInspectionDue     DateTime?
+  notes                 String?
+  isSample              Boolean         @default(false)
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+  zone                  ServiceZone?    @relation(fields: [zoneId], references: [id])
+  assignedDriver        User?           @relation("TruckDriver", fields: [assignedDriverUserId], references: [id])
+  equipment             TruckEquipment[]
+  maintenance           MaintenanceRecord[]
+  assignments           BookingAssignment[]
+  expenses              Expense[]
+
+  @@index([status, zoneId])
+  @@map("tow_trucks")
+}
+
+model TruckEquipment {
+  id        String          @id @default(cuid())
+  truckId   String
+  type      EquipmentType
+  status    EquipmentStatus @default(OK)
+  notes     String?
+  updatedAt DateTime        @updatedAt
+  truck     TowTruck        @relation(fields: [truckId], references: [id], onDelete: Cascade)
+
+  @@unique([truckId, type])
+  @@map("truck_equipment")
+}
+
+model MaintenanceRecord {
+  id          String          @id @default(cuid())
+  truckId     String
+  type        MaintenanceType
+  description String
+  odometerKm  Int?
+  cost        Int             @default(0)
+  performedAt DateTime
+  nextDueAt   DateTime?
+  expenseId   String?         @unique
+  createdById String?
+  createdAt   DateTime        @default(now())
+  truck       TowTruck        @relation(fields: [truckId], references: [id], onDelete: Cascade)
+  expense     Expense?        @relation(fields: [expenseId], references: [id])
+
+  @@index([truckId, performedAt])
+  @@map("maintenance_records")
+}
+
+// ───────────────────────── Services & pricing ─────────────────────────
+
+model ServiceZone {
+  id         String               @id @default(cuid())
+  name       String
+  city       String
+  centerLat  Float
+  centerLng  Float
+  radiusKm   Float
+  polygon    Json?
+  active     Boolean              @default(true)
+  createdAt  DateTime             @default(now())
+  updatedAt  DateTime             @updatedAt
+  categories ServiceZoneCategory[]
+  workers    WorkerProfile[]      @relation("WorkerZones")
+  trucks     TowTruck[]
+  drivers    DriverAvailability[]
+  bookings   Booking[]
+  rateCards  RateCard[]
+
+  @@map("service_zones")
+}
+
+model ServiceCategory {
+  id                String               @id @default(cuid())
+  key               String               @unique
+  name              String
+  description       String
+  kind              ServiceKind
+  allowedTruckTypes TruckType[]
+  requiredEquipment EquipmentType[]
+  vehicleClasses    VehicleClass[]
+  defaultCrew       Int                  @default(1)
+  icon              String?
+  sortOrder         Int                  @default(0)
+  active            Boolean              @default(true)
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  zones             ServiceZoneCategory[]
+  rateCards         RateCard[]
+  bookings          Booking[]
+
+  @@map("service_categories")
+}
+
+model ServiceZoneCategory {
+  zoneId     String
+  categoryId String
+  active     Boolean         @default(true)
+  zone       ServiceZone     @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+  category   ServiceCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([zoneId, categoryId])
+  @@map("service_zone_categories")
+}
+
+/// Versioned rate card. Editing creates a new version; old versions are kept so
+/// that quotes and invoices can always be traced to the exact rules used.
+model RateCard {
+  id                  String          @id @default(cuid())
+  lineageId           String
+  version             Int
+  isActive            Boolean         @default(true)
+  name                String
+  serviceCategoryId   String
+  zoneId              String?
+  vehicleClass        VehicleClass?
+  fleetContractId     String?
+  baseFee             Int
+  includedKm          Float
+  perKm               Int
+  pickupFreeKm        Float           @default(10)
+  pickupPerKm         Int             @default(0)
+  includedCrew        Int             @default(1)
+  crewChargePerWorker Int             @default(0)
+  waitingFreeMinutes  Int             @default(15)
+  waitingPer15Min     Int             @default(0)
+  nightSurchargeBps   Int             @default(0)
+  nightStartHour      Int             @default(22)
+  nightEndHour        Int             @default(6)
+  holidaySurchargeBps Int             @default(0)
+  minimumCharge       Int             @default(0)
+  scheduledBookingFee Int             @default(0)
+  equipmentSurcharges Json            @default("{}")
+  taxRateBps          Int             @default(1800)
+  tollTreatment       String          @default("PASS_THROUGH_ACTUALS")
+  quoteValidityMin    Int             @default(30)
+  cancellationPolicy  Json
+  effectiveFrom       DateTime        @default(now())
+  createdById         String?
+  changeReason        String?
+  createdAt           DateTime        @default(now())
+  serviceCategory     ServiceCategory @relation(fields: [serviceCategoryId], references: [id])
+  zone                ServiceZone?    @relation(fields: [zoneId], references: [id])
+  fleetContract       FleetContract?  @relation(fields: [fleetContractId], references: [id])
+
+  @@unique([lineageId, version])
+  @@index([serviceCategoryId, isActive])
+  @@map("rate_cards")
+}
+
+model PromoCode {
+  id          String    @id @default(cuid())
+  code        String    @unique
+  description String
+  discountBps Int
+  maxDiscount Int
+  validFrom   DateTime
+  validTo     DateTime
+  maxUses     Int?
+  usedCount   Int       @default(0)
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+
+  @@map("promo_codes")
+}
+
+// ───────────────────────────── Bookings ─────────────────────────────
+
+model Booking {
+  id                   String          @id @default(cuid())
+  code                 String          @unique
+  clientRequestId      String?         @unique
+  customerUserId       String
+  vehicleId            String?
+  fleetAccountId       String?
+  serviceCategoryId    String
+  zoneId               String?
+  status               BookingStatus   @default(REQUESTED)
+  type                 BookingType     @default(EMERGENCY)
+  scheduledFor         DateTime?
+  priority             BookingPriority @default(NORMAL)
+  safetyFlags          String[]
+  requiresManualReview Boolean         @default(false)
+  manualReviewReasons  String[]
+  reviewedById         String?
+  reviewedAt           DateTime?
+  recommendation       Json?
+  crewRequested        Int             @default(1)
+  crewRecommended      Int             @default(1)
+  contactName          String
+  contactPhone         String
+  instructions         String?
+  promoCode            String?
+  membershipSubscriptionId String?
+  pickupOtp            String
+  handoverOtp          String
+  pickupVerifiedAt     DateTime?
+  pickupDistanceKm     Float?
+  towDistanceKm        Float?
+  distanceSource       String?
+  etaAt                DateTime?
+  arrivedAt            DateTime?
+  waitingMinutes       Int             @default(0)
+  dispatchAttempts     Int             @default(0)
+  cancellationReason   String?
+  cancellationFee      Int             @default(0)
+  cancelledById        String?
+  failureReason        String?
+  holdReturnStatus     BookingStatus?
+  completedAt          DateTime?
+  version              Int             @default(0)
+  isSample             Boolean         @default(false)
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+  customer             User            @relation("BookingCustomer", fields: [customerUserId], references: [id])
+  vehicle              Vehicle?        @relation(fields: [vehicleId], references: [id])
+  fleetAccount         FleetAccount?   @relation(fields: [fleetAccountId], references: [id])
+  serviceCategory      ServiceCategory @relation(fields: [serviceCategoryId], references: [id])
+  zone                 ServiceZone?    @relation(fields: [zoneId], references: [id])
+  membershipSubscription MembershipSubscription? @relation(fields: [membershipSubscriptionId], references: [id])
+  locations            BookingLocation[]
+  assessment           BookingVehicleAssessment?
+  attachments          BookingAttachment[]
+  quotes               BookingQuote[]
+  assignments          BookingAssignment[]
+  teamMembers          BookingTeamMember[]
+  statusHistory        BookingStatusHistory[]
+  trackingEvents       TrackingEvent[]
+  conditionReports     VehicleConditionReport[]
+  custody              CustodyConfirmation[]
+  invoice              Invoice?
+  ratings              Rating[]
+  incidents            Incident[]
+  escalations          Escalation[]
+  shareLinks           BookingShareLink[]
+  tickets              SupportTicket[]
+  earnings             DriverEarning[]
+  expenses             Expense[]
+  membershipUsage      MembershipUsage?
+
+  @@index([status])
+  @@index([customerUserId, createdAt])
+  @@index([zoneId, status])
+  @@index([createdAt])
+  @@map("bookings")
+}
+
+model BookingLocation {
+  id              String           @id @default(cuid())
+  bookingId       String
+  kind            LocationKind
+  lat             Float
+  lng             Float
+  accuracyM       Float?
+  capturedAt      DateTime?
+  source          LocationSource
+  address         String?
+  landmark        String?
+  highway         String?
+  roadDirection   String?
+  kmMarker        String?
+  gateNumber      String?
+  floor           String?
+  parkingLevel    String?
+  accessNotes     String?
+  isSafeLocation  Boolean?
+  destinationType DestinationType?
+  placeName       String?
+  createdAt       DateTime         @default(now())
+  booking         Booking          @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@unique([bookingId, kind])
+  @@map("booking_locations")
+}
+
+model BookingVehicleAssessment {
+  id                       String            @id @default(cuid())
+  bookingId                String            @unique
+  breakdownType            BreakdownType
+  engineStarts             TriState
+  wheelsRotate             TriState
+  steeringWorks            TriState
+  brakesWork               TriState
+  isStuck                  TriState
+  isOverturned             TriState
+  isSubmerged              TriState
+  blockingTraffic          TriState
+  majorDamage              TriState
+  isEvOrHybrid             Boolean           @default(false)
+  accessRestriction        AccessRestriction @default(NONE)
+  hasChildren              Boolean           @default(false)
+  hasElderly               Boolean           @default(false)
+  needsAccessibility       Boolean           @default(false)
+  passengersNeedingTransport Int             @default(0)
+  notes                    String?
+  createdAt                DateTime          @default(now())
+  booking                  Booking           @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@map("booking_vehicle_assessments")
+}
+
+/// Evidence files. Rows are append-only: originals are never overwritten.
+model BookingAttachment {
+  id           String         @id @default(cuid())
+  bookingId    String
+  uploadedById String
+  kind         AttachmentKind
+  storageKey   String         @unique
+  mimeType     String
+  sizeBytes    Int
+  sha256       String
+  caption      String?
+  createdAt    DateTime       @default(now())
+  booking      Booking        @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([bookingId, kind])
+  @@map("booking_attachments")
+}
+
+model BookingQuote {
+  id               String             @id @default(cuid())
+  bookingId        String
+  version          Int
+  kind             QuoteKind
+  status           QuoteStatus
+  rateCardId       String
+  rateCardVersion  Int
+  pricingSnapshot  Json
+  assumptions      Json
+  subtotal         Int
+  discountTotal    Int
+  taxableValue     Int
+  taxTotal         Int
+  passThroughTotal Int
+  total            Int
+  currency         String             @default("INR")
+  expiresAt        DateTime?
+  reason           String?
+  requestedById    String?
+  internalApprovedById String?
+  decidedById      String?
+  decidedAt        DateTime?
+  createdAt        DateTime           @default(now())
+  booking          Booking            @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  items            BookingQuoteItem[]
+
+  @@unique([bookingId, version])
+  @@index([bookingId, status])
+  @@map("booking_quotes")
+}
+
+model BookingQuoteItem {
+  id            String       @id @default(cuid())
+  quoteId       String
+  code          String
+  description   String
+  quantity      Float        @default(1)
+  unitAmount    Int
+  amount        Int
+  taxable       Boolean      @default(true)
+  isPassThrough Boolean      @default(false)
+  isEstimate    Boolean      @default(true)
+  isAdditional  Boolean      @default(false)
+  reason        String?
+  sortOrder     Int          @default(0)
+  quote         BookingQuote @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  @@index([quoteId])
+  @@map("booking_quote_items")
+}
+
+model BookingAssignment {
+  id              String           @id @default(cuid())
+  bookingId       String
+  driverUserId    String
+  truckId         String?
+  status          AssignmentStatus
+  method          AssignmentMethod
+  attempt         Int
+  offeredAt       DateTime         @default(now())
+  expiresAt       DateTime
+  respondedAt     DateTime?
+  rejectionReason String?
+  assignedById    String?
+  etaMinutes      Int?
+  distanceKm      Float?
+  score           Float?
+  scoreBreakdown  Json?
+  booking         Booking          @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  driver          User             @relation(fields: [driverUserId], references: [id])
+  truck           TowTruck?        @relation(fields: [truckId], references: [id])
+
+  @@index([bookingId])
+  @@index([driverUserId, status])
+  @@map("booking_assignments")
+}
+
+model BookingTeamMember {
+  id             String   @id @default(cuid())
+  bookingId      String
+  userId         String
+  role           TeamRole
+  responsibility String?
+  addedById      String?
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  booking        Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  user           User     @relation(fields: [userId], references: [id])
+
+  @@unique([bookingId, userId])
+  @@map("booking_team_members")
+}
+
+model BookingStatusHistory {
+  id          String         @id @default(cuid())
+  bookingId   String
+  fromStatus  BookingStatus?
+  toStatus    BookingStatus
+  actorUserId String?
+  actorRole   ActorRole
+  reason      String?
+  isOverride  Boolean        @default(false)
+  metadata    Json?
+  createdAt   DateTime       @default(now())
+  booking     Booking        @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([bookingId, createdAt])
+  @@map("booking_status_history")
+}
+
+model TrackingEvent {
+  id           String   @id @default(cuid())
+  bookingId    String?
+  driverUserId String
+  lat          Float
+  lng          Float
+  accuracyM    Float?
+  speedKmh     Float?
+  heading      Float?
+  recordedAt   DateTime
+  receivedAt   DateTime @default(now())
+  booking      Booking? @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([bookingId, recordedAt])
+  @@index([driverUserId, recordedAt])
+  @@map("tracking_events")
+}
+
+/// Append-only. A correction is a new row pointing at the report it supersedes.
+model VehicleConditionReport {
+  id            String         @id @default(cuid())
+  bookingId     String
+  stage         ConditionStage
+  reportedById  String
+  notes         String?
+  damageMarks   Json
+  odometerKm    Int?
+  fuelLevel     String?
+  itemsInVehicle String?
+  attachmentIds String[]
+  supersedesId  String?
+  createdAt     DateTime       @default(now())
+  booking       Booking        @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([bookingId, stage])
+  @@map("vehicle_condition_reports")
+}
+
+model CustodyConfirmation {
+  id                   String        @id @default(cuid())
+  bookingId            String
+  stage                CustodyStage
+  method               CustodyMethod
+  recipientName        String?
+  recipientRelation    String?
+  confirmedById        String
+  overrideReason       String?
+  overrideApprovedById String?
+  lat                  Float?
+  lng                  Float?
+  createdAt            DateTime      @default(now())
+  booking              Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@unique([bookingId, stage])
+  @@map("custody_confirmations")
+}
+
+model BookingShareLink {
+  id           String    @id @default(cuid())
+  bookingId    String
+  tokenHash    String    @unique
+  createdById  String
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  viewCount    Int       @default(0)
+  lastViewedAt DateTime?
+  createdAt    DateTime  @default(now())
+  booking      Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([bookingId])
+  @@map("booking_share_links")
+}
+
+// ───────────────────────────── Billing ─────────────────────────────
+
+model Invoice {
+  id               String        @id @default(cuid())
+  number           String        @unique
+  type             InvoiceType
+  status           InvoiceStatus @default(ISSUED)
+  paymentStatus    PaymentStatus @default(UNPAID)
+  bookingId        String?       @unique
+  subscriptionId   String?       @unique
+  customerUserId   String
+  fleetAccountId   String?
+  approvedQuoteId  String?
+  billingName      String
+  billingPhone     String?
+  billingEmail     String?
+  billingAddress   String?
+  billingGstin     String?
+  currency         String        @default("INR")
+  subtotal         Int
+  discountTotal    Int
+  taxableValue     Int
+  taxTotal         Int
+  passThroughTotal Int
+  total            Int
+  amountPaid       Int           @default(0)
+  amountPendingCash Int          @default(0)
+  amountCredited   Int           @default(0)
+  amountRefunded   Int           @default(0)
+  amountWrittenOff Int           @default(0)
+  outstanding      Int
+  approvedQuoteTotal Int?
+  pricingSnapshot  Json?
+  disputed         Boolean       @default(false)
+  notes            String?
+  issuedAt         DateTime      @default(now())
+  dueAt            DateTime?
+  voidedAt         DateTime?
+  voidReason       String?
+  isSample         Boolean       @default(false)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  booking          Booking?      @relation(fields: [bookingId], references: [id])
+  subscription     MembershipSubscription? @relation(fields: [subscriptionId], references: [id])
+  fleetAccount     FleetAccount? @relation(fields: [fleetAccountId], references: [id])
+  items            InvoiceItem[]
+  payments         Payment[]
+  refunds          Refund[]
+  creditNotes      CreditNote[]
+  adjustments      FinancialAdjustment[]
+  tickets          SupportTicket[]
+
+  @@index([customerUserId, issuedAt])
+  @@index([issuedAt])
+  @@index([paymentStatus])
+  @@map("invoices")
+}
+
+model InvoiceItem {
+  id            String  @id @default(cuid())
+  invoiceId     String
+  code          String
+  description   String
+  quantity      Float   @default(1)
+  unitAmount    Int
+  amount        Int
+  taxable       Boolean @default(true)
+  isPassThrough Boolean @default(false)
+  isAdditional  Boolean @default(false)
+  sourceQuoteId String?
+  reason        String?
+  sortOrder     Int     @default(0)
+  invoice       Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@map("invoice_items")
+}
+
+model CreditNote {
+  id            String   @id @default(cuid())
+  number        String   @unique
+  invoiceId     String
+  taxableAmount Int
+  taxAmount     Int
+  amount        Int
+  reason        String
+  issuedById    String
+  createdAt     DateTime @default(now())
+  invoice       Invoice  @relation(fields: [invoiceId], references: [id])
+
+  @@index([invoiceId])
+  @@map("credit_notes")
+}
+
+model Payment {
+  id                String           @id @default(cuid())
+  invoiceId         String
+  method            PaymentMethod
+  provider          PaymentProvider
+  status            PaymentTxnStatus
+  amount            Int
+  currency          String           @default("INR")
+  providerOrderId   String?          @unique
+  providerPaymentId String?          @unique
+  idempotencyKey    String           @unique
+  gatewayFee        Int              @default(0)
+  gatewayTax        Int              @default(0)
+  receiptNumber     String?          @unique
+  collectedById     String?
+  confirmedById     String?
+  initiatedById     String?
+  failureReason     String?
+  isSandbox         Boolean          @default(false)
+  notes             String?
+  createdAt         DateTime         @default(now())
+  succeededAt       DateTime?
+  updatedAt         DateTime         @updatedAt
+  invoice           Invoice          @relation(fields: [invoiceId], references: [id])
+  refunds           Refund[]
+
+  @@index([invoiceId, status])
+  @@index([succeededAt])
+  @@map("payments")
+}
+
+model PaymentWebhookEvent {
+  id             String        @id @default(cuid())
+  provider       PaymentProvider
+  eventId        String
+  eventType      String
+  signatureValid Boolean
+  payload        Json
+  status         WebhookStatus @default(RECEIVED)
+  error          String?
+  receivedAt     DateTime      @default(now())
+  processedAt    DateTime?
+
+  @@unique([provider, eventId])
+  @@map("payment_webhook_events")
+}
+
+model Refund {
+  id               String       @id @default(cuid())
+  invoiceId        String
+  paymentId        String?
+  amount           Int
+  status           RefundStatus
+  reason           String
+  idempotencyKey   String       @unique
+  providerRefundId String?      @unique
+  requestedById    String
+  approvedById     String?
+  failureReason    String?
+  isSandbox        Boolean      @default(false)
+  createdAt        DateTime     @default(now())
+  processedAt      DateTime?
+  updatedAt        DateTime     @updatedAt
+  invoice          Invoice      @relation(fields: [invoiceId], references: [id])
+  payment          Payment?     @relation(fields: [paymentId], references: [id])
+
+  @@index([invoiceId])
+  @@index([status])
+  @@map("refunds")
+}
+
+model FinancialAdjustment {
+  id           String         @id @default(cuid())
+  invoiceId    String?
+  type         AdjustmentType
+  amount       Int
+  reason       String
+  createdById  String
+  approvedById String?
+  createdAt    DateTime       @default(now())
+  invoice      Invoice?       @relation(fields: [invoiceId], references: [id])
+
+  @@map("financial_adjustments")
+}
+
+// ─────────────────────────── Costs & payroll ───────────────────────────
+
+model Expense {
+  id              String          @id @default(cuid())
+  number          String          @unique
+  category        ExpenseCategory
+  source          ExpenseSource   @default(DIRECT)
+  status          ExpenseStatus   @default(SUBMITTED)
+  description     String
+  vendorName      String?
+  vendorBillRef   String?
+  amount          Int
+  taxAmount       Int             @default(0)
+  expenseDate     DateTime
+  fuelLitres      Float?
+  odometerKm      Int?
+  truckId         String?
+  bookingId       String?
+  zoneId          String?
+  claimantUserId  String?
+  reimbursable    Boolean         @default(false)
+  attachmentKey   String?
+  submittedById   String
+  approvedById    String?
+  approvedAt      DateTime?
+  rejectionReason String?
+  paidAt          DateTime?
+  paymentRef      String?
+  isSample        Boolean         @default(false)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  truck           TowTruck?       @relation(fields: [truckId], references: [id])
+  booking         Booking?        @relation(fields: [bookingId], references: [id])
+  maintenance     MaintenanceRecord?
+
+  @@index([expenseDate])
+  @@index([category, status])
+  @@map("expenses")
+}
+
+model SalaryRecord {
+  id          String       @id @default(cuid())
+  userId      String
+  frequency   PayFrequency
+  periodStart DateTime
+  periodEnd   DateTime
+  baseAmount  Int
+  incentives  Int          @default(0)
+  deductions  Int          @default(0)
+  netAmount   Int
+  status      SalaryStatus @default(ACCRUED)
+  approvedById String?
+  paidAt      DateTime?
+  paymentRef  String?
+  notes       String?
+  createdById String
+  isSample    Boolean      @default(false)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  user        User         @relation(fields: [userId], references: [id])
+
+  @@unique([userId, periodStart, periodEnd])
+  @@index([periodEnd])
+  @@map("salary_records")
+}
+
+model DriverEarning {
+  id        String        @id @default(cuid())
+  userId    String
+  bookingId String?
+  kind      EarningKind
+  amount    Int
+  status    EarningStatus @default(PENDING)
+  payoutId  String?
+  expenseId String?       @unique
+  note      String?
+  earnedAt  DateTime      @default(now())
+  createdById String?
+  user      User          @relation(fields: [userId], references: [id])
+  booking   Booking?      @relation(fields: [bookingId], references: [id])
+  payout    DriverPayout? @relation(fields: [payoutId], references: [id])
+
+  @@index([userId, earnedAt])
+  @@index([bookingId])
+  @@map("driver_earnings")
+}
+
+model DriverPayout {
+  id                   String          @id @default(cuid())
+  userId               String
+  periodStart          DateTime
+  periodEnd            DateTime
+  earningsAmount       Int
+  incentivesAmount     Int
+  deductionsAmount     Int
+  reimbursementsAmount Int
+  netAmount            Int
+  status               PayoutStatus    @default(DRAFT)
+  approvedById         String?
+  paidAt               DateTime?
+  paymentRef           String?
+  createdById          String
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+  user                 User            @relation(fields: [userId], references: [id])
+  earnings             DriverEarning[]
+
+  @@index([userId, periodEnd])
+  @@map("driver_payouts")
+}
+
+// ─────────────────────── Memberships & fleet accounts ───────────────────────
+
+model Membership {
+  id                 String   @id @default(cuid())
+  code               String   @unique
+  name               String
+  description        String
+  price              Int
+  durationMonths     Int
+  includedServices   Int
+  includedKmPerService Float  @default(0)
+  discountBps        Int      @default(0)
+  coveredCategoryKeys String[]
+  exclusions         String
+  renewalTerms       String
+  forFleet           Boolean  @default(false)
+  active             Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  subscriptions      MembershipSubscription[]
+
+  @@map("memberships")
+}
+
+model MembershipSubscription {
+  id              String             @id @default(cuid())
+  membershipId    String
+  userId          String?
+  fleetAccountId  String?
+  status          SubscriptionStatus
+  startsAt        DateTime?
+  endsAt          DateTime?
+  servicesUsed    Int                @default(0)
+  planSnapshot    Json
+  cancelledAt     DateTime?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  membership      Membership         @relation(fields: [membershipId], references: [id])
+  user            User?              @relation(fields: [userId], references: [id])
+  fleetAccount    FleetAccount?      @relation(fields: [fleetAccountId], references: [id])
+  invoice         Invoice?
+  usages          MembershipUsage[]
+  bookings        Booking[]
+
+  @@index([userId, status])
+  @@map("membership_subscriptions")
+}
+
+model MembershipUsage {
+  id             String                 @id @default(cuid())
+  subscriptionId String
+  bookingId      String                 @unique
+  benefitAmount  Int
+  createdAt      DateTime               @default(now())
+  subscription   MembershipSubscription @relation(fields: [subscriptionId], references: [id])
+  booking        Booking                @relation(fields: [bookingId], references: [id])
+
+  @@map("membership_usages")
+}
+
+model FleetAccount {
+  id               String   @id @default(cuid())
+  name             String
+  gstin            String?
+  billingEmail     String
+  billingPhone     String?
+  billingAddress   String?
+  creditLimit      Int      @default(0)
+  paymentTermsDays Int      @default(30)
+  status           UserStatus @default(ACTIVE)
+  isSample         Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  members          FleetAccountMember[]
+  contracts        FleetContract[]
+  vehicles         Vehicle[]
+  bookings         Booking[]
+  invoices         Invoice[]
+  subscriptions    MembershipSubscription[]
+
+  @@map("fleet_accounts")
+}
+
+model FleetAccountMember {
+  fleetAccountId String
+  userId         String
+  isManager      Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+  fleetAccount   FleetAccount @relation(fields: [fleetAccountId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([fleetAccountId, userId])
+  @@map("fleet_account_members")
+}
+
+model FleetContract {
+  id                  String       @id @default(cuid())
+  fleetAccountId      String
+  name                String
+  startsAt            DateTime
+  endsAt              DateTime
+  active              Boolean      @default(true)
+  discountBps         Int          @default(0)
+  slaResponseMinutes  Int?
+  monthlyServiceLimit Int?
+  notes               String?
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+  fleetAccount        FleetAccount @relation(fields: [fleetAccountId], references: [id], onDelete: Cascade)
+  rateCards           RateCard[]
+
+  @@map("fleet_contracts")
+}
+
+// ─────────────────────── Engagement, support, safety ───────────────────────
+
+model Notification {
+  id        String              @id @default(cuid())
+  userId    String
+  channel   NotificationChannel
+  type      String
+  title     String
+  body      String
+  data      Json?
+  status    DeliveryStatus      @default(PENDING)
+  error     String?
+  readAt    DateTime?
+  sentAt    DateTime?
+  createdAt DateTime            @default(now())
+  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, channel, createdAt])
+  @@map("notifications")
+}
+
+model Rating {
+  id          String   @id @default(cuid())
+  bookingId   String
+  raterUserId String
+  rateeUserId String
+  score       Int
+  comment     String?
+  tags        String[]
+  createdAt   DateTime @default(now())
+  booking     Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  rater       User     @relation("RatingRater", fields: [raterUserId], references: [id])
+  ratee       User     @relation("RatingRatee", fields: [rateeUserId], references: [id])
+
+  @@unique([bookingId, raterUserId, rateeUserId])
+  @@index([rateeUserId])
+  @@map("ratings")
+}
+
+model SupportTicket {
+  id           String          @id @default(cuid())
+  number       String          @unique
+  userId       String
+  category     TicketCategory
+  status       TicketStatus    @default(OPEN)
+  priority     Severity        @default(MEDIUM)
+  subject      String
+  bookingId    String?
+  invoiceId    String?
+  subjectUserId String?
+  assignedToId String?
+  resolution   String?
+  verified     Boolean?
+  resolvedAt   DateTime?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  user         User            @relation("TicketOwner", fields: [userId], references: [id])
+  booking      Booking?        @relation(fields: [bookingId], references: [id])
+  invoice      Invoice?        @relation(fields: [invoiceId], references: [id])
+  messages     TicketMessage[]
+
+  @@index([status, category])
+  @@index([userId])
+  @@map("support_tickets")
+}
+
+model TicketMessage {
+  id        String        @id @default(cuid())
+  ticketId  String
+  authorId  String
+  body      String
+  internal  Boolean       @default(false)
+  createdAt DateTime      @default(now())
+  ticket    SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+  @@map("ticket_messages")
+}
+
+model Incident {
+  id               String         @id @default(cuid())
+  bookingId        String?
+  reportedById     String
+  type             IncidentType
+  severity         Severity
+  description      String
+  lat              Float?
+  lng              Float?
+  status           IncidentStatus @default(OPEN)
+  acknowledgedById String?
+  acknowledgedAt   DateTime?
+  resolution       String?
+  resolvedAt       DateTime?
+  createdAt        DateTime       @default(now())
+  booking          Booking?       @relation(fields: [bookingId], references: [id])
+
+  @@index([status])
+  @@map("incidents")
+}
+
+model Escalation {
+  id           String           @id @default(cuid())
+  bookingId    String
+  type         EscalationType
+  status       EscalationStatus @default(OPEN)
+  detail       String
+  dedupeKey    String           @unique
+  resolution   String?
+  resolvedById String?
+  resolvedAt   DateTime?
+  createdAt    DateTime         @default(now())
+  booking      Booking          @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@map("escalations")
+}
+
+// ───────────────────────────── Platform ─────────────────────────────
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  actorUserId String?
+  action      String
+  entityType  String
+  entityId    String?
+  before      Json?
+  after       Json?
+  ip          String?
+  requestId   String?
+  createdAt   DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([actorUserId, createdAt])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model ApplicationSetting {
+  key         String   @id
+  value       Json
+  updatedById String?
+  updatedAt   DateTime @updatedAt
+
+  @@map("application_settings")
+}
+
+model Counter {
+  key   String @id
+  value Int    @default(0)
+
+  @@map("counters")
+}
+
+model BackgroundJob {
+  id          String    @id @default(cuid())
+  type        String
+  payload     Json
+  status      JobStatus @default(PENDING)
+  runAt       DateTime  @default(now())
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(5)
+  dedupeKey   String?   @unique
+  lastError   String?
+  lockedAt    DateTime?
+  lockedBy    String?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([status, runAt])
+  @@map("background_jobs")
+}
