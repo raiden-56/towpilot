@@ -1,5 +1,5 @@
 # Publishes the web frontend to GitHub Pages. The API server is not hosted here,
-# so features that call the backend will not work on the Pages site.
+# so the site is built with guest mode: visitors explore the app with in-browser sample data.
 name: Deploy to GitHub Pages
 
 on:
@@ -29,6 +29,8 @@ jobs:
       - name: Build
         env:
           BASE_PATH: /${{ github.event.repository.name }}/
+          # No API on Pages: offer "Continue as guest" with in-browser sample data (src/guest).
+          VITE_GUEST_MODE: 'true'
         run: npm run build -w apps/web
       # SPA fallback: GitHub Pages serves 404.html for deep links.
       - run: cp apps/web/dist/index.html apps/web/dist/404.html

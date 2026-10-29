@@ -3,13 +3,15 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Alert, Box, Button, Card, CardContent, Checkbox, Container, FormControlLabel, InputAdornment, Link, Stack, Tab, Tabs, TextField, Typography } from '@mui/material';
+import { Alert, Box, Button, Card, CardContent, Checkbox, Container, FormControlLabel, InputAdornment, Link, ListItemText, Menu, MenuItem, Stack, Tab, Tabs, TextField, Typography } from '@mui/material';
+import ExploreOutlinedIcon from '@mui/icons-material/ExploreOutlined';
 import { ApiError } from '@/api/client';
 import { homePathFor, useAuth } from '@/hooks/useAuth';
 import { useConfig } from '@/hooks/useConfig';
 import { EmergencyNotice, errorMessage, SandboxBanner } from '@/components/common';
 import { Brand, ThemeToggle } from '@/layouts/shared';
 import { brand } from '@/theme';
+import { GUEST_MODE_ENABLED, GUEST_ROLES, type GuestRole } from '@/guest/session';
 
 const phoneSchema = z.object({ phone: z.string().regex(/^[6-9]\d{9}$/, 'Enter a 10-digit Indian mobile number') });
 const staffSchema = z.object({ email: z.string().email('Enter a valid email'), password: z.string().min(1, 'Enter your password') });
@@ -48,6 +50,7 @@ export default function Login() {
           </Tabs>
           <CardContent sx={{ p: 3 }}>{tab === 'phone' ? <PhoneLogin /> : <StaffLogin />}</CardContent>
         </Card>
+        {GUEST_MODE_ENABLED && <GuestEntry />}
         <Box sx={{ mt: 3 }}>
           <EmergencyNotice />
         </Box>
@@ -197,5 +200,47 @@ function StaffLogin() {
         For administrators, dispatchers and finance staff. Forgot your password? Reset it with an SMS code to your registered mobile via your administrator.
       </Typography>
     </Stack>
+  );
+}
+
+/** Guest mode (VITE_GUEST_MODE=true): explore any portal with sample data, no account or server needed. */
+function GuestEntry() {
+  const { enterGuest } = useAuth();
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const choose = async (role: GuestRole) => {
+    setAnchor(null);
+    try {
+      await enterGuest(role);
+    } catch (e) {
+      setError(errorMessage(e));
+    }
+  };
+  return (
+    <Card variant="outlined" sx={{ mt: 2, borderStyle: 'dashed', borderColor: 'primary.main' }}>
+      <CardContent sx={{ p: 2.5 }}>
+        <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+          Just looking around?
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          Explore TowPilot with sample data — no account needed. Pick the portal you want to see.
+        </Typography>
+        <Button fullWidth size="large" variant="contained" color="secondary" startIcon={<ExploreOutlinedIcon />} onClick={(e) => setAnchor(e.currentTarget)} aria-haspopup="menu" aria-controls={anchor ? 'guest-role-menu' : undefined}>
+          Continue as guest
+        </Button>
+        {error && (
+          <Alert severity="error" sx={{ mt: 2 }}>
+            {error}
+          </Alert>
+        )}
+        <Menu id="guest-role-menu" anchorEl={anchor} open={!!anchor} onClose={() => setAnchor(null)} slotProps={{ paper: { sx: { width: anchor?.offsetWidth, maxWidth: 'calc(100% - 32px)' } } }}>
+          {GUEST_ROLES.map((r) => (
+            <MenuItem key={r.role} onClick={() => void choose(r.role)}>
+              <ListItemText primary={r.label} secondary={r.description} slotProps={{ secondary: { sx: { whiteSpace: 'normal' } } }} />
+            </MenuItem>
+          ))}
+        </Menu>
+      </CardContent>
+    </Card>
   );
 }

@@ -3,7 +3,10 @@
  *  - Access token kept in memory only (never localStorage).
  *  - Refresh token lives in an httpOnly cookie; a 401 triggers one silent refresh + retry.
  *  - Errors are normalised to ApiError with the server's code/message/details.
+ *  - In guest mode (src/guest) requests are answered in the browser from sample data instead.
  */
+import { guestRole } from '@/guest/session';
+
 export interface ApiErrorBody {
   code: string;
   message: string;
@@ -54,6 +57,14 @@ export function configureClient(opts: { onSessionExpired: () => void; onTokenRef
 }
 
 export async function refreshSession(): Promise<boolean> {
+  const guest = guestRole();
+  if (guest) {
+    // Guest mode: restore the sample session without any network call.
+    const { guestUser } = await import('@/guest/mock');
+    accessToken = 'guest';
+    onTokenRefreshed?.(accessToken, guestUser(guest));
+    return true;
+  }
   if (!refreshing) {
     refreshing = (async () => {
       try {
@@ -85,7 +96,19 @@ function buildUrl(path: string, query?: Query) {
   return `${BASE}${path}${qs ? `?${qs}` : ''}`;
 }
 
-async function request<T>(method: string, path: string, opts: { body?: unknown; query?: Query; headers?: Record<string, string>; raw?: boolean; retry?: boolean } = {}): Promise<T> {
+type RequestOpts = { body?: unknown; query?: Query; headers?: Record<string, string>; raw?: boolean; retry?: boolean; paged?: boolean };
+
+/** Guest mode: answer the request in the browser from sample data (src/guest/mock, loaded on demand). */
+async function guestRequest<T>(method: string, path: string, opts: RequestOpts): Promise<T> {
+  const role = guestRole()!;
+  const { handleGuestRequest } = await import('@/guest/mock');
+  const res = await handleGuestRequest(role, method, path, opts.query ?? {}, opts.body, !!opts.paged);
+  if (res.kind === 'file') return res.response as unknown as T;
+  return (res.meta ? { data: res.data, meta: res.meta } : res.data) as T;
+}
+
+async function request<T>(method: string, path: string, opts: RequestOpts = {}): Promise<T> {
+  if (guestRole()) return guestRequest<T>(method, path, opts);
   const headers: Record<string, string> = { ...opts.headers };
   const isForm = opts.body instanceof FormData;
   if (opts.body !== undefined && !isForm) headers['content-type'] = 'application/json';
@@ -112,7 +135,7 @@ async function request<T>(method: string, path: string, opts: { body?: unknown; 
 
 export const api = {
   get: <T>(path: string, query?: Query) => request<T>('GET', path, { query }),
-  page: <T>(path: string, query?: Query) => request<Paged<T>>('GET', path, { query }),
+  page: <T>(path: string, query?: Query) => request<Paged<T>>('GET', path, { query, paged: true }),
   post: <T>(path: string, body?: unknown, headers?: Record<string, string>) => request<T>('POST', path, { body: body ?? {}, headers }),
   put: <T>(path: string, body?: unknown) => request<T>('PUT', path, { body: body ?? {} }),
   patch: <T>(path: string, body?: unknown) => request<T>('PATCH', path, { body: body ?? {} }),

@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { api, refreshSession, tokenStore } from '@/api/client';
 import type { Me, Role } from '@/api/types';
+import { endGuestSession, isGuestActive, startGuestSession, type GuestRole } from '@/guest/session';
 import { signedIn, signedOut, store, useAppDispatch, useAppSelector } from '@/store';
 
 interface TokenResponse {
@@ -46,10 +47,22 @@ export function useAuth() {
 
   const loginWithPassword = useCallback(async (email: string, password: string) => finish(await api.post<TokenResponse>('/auth/login', { email, password })), [finish]);
 
+  /** Guest mode: sign in as a sample account without any network call (see src/guest). */
+  const enterGuest = useCallback(
+    async (role: GuestRole) => {
+      startGuestSession(role);
+      qc.clear();
+      const { guestUser } = await import('@/guest/mock');
+      return finish({ accessToken: 'guest', user: guestUser(role) });
+    },
+    [finish, qc],
+  );
+
   const logout = useCallback(async () => {
     try {
       await api.post('/auth/logout');
     } finally {
+      if (isGuestActive()) endGuestSession();
       tokenStore.set(null);
       dispatch(signedOut());
       qc.clear();
@@ -59,5 +72,5 @@ export function useAuth() {
   const hasRole = useCallback((...roles: Role[]) => !!user && roles.some((r) => user.roles.includes(r)), [user]);
   const can = useCallback((perm: string) => !!user?.permissions.includes(perm), [user]);
 
-  return { status, user, requestOtp, verifyOtp, loginWithPassword, logout, hasRole, can };
+  return { status, user, requestOtp, verifyOtp, loginWithPassword, enterGuest, logout, hasRole, can };
 }

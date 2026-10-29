@@ -29,6 +29,8 @@ import type { BookingStatus, PaymentStatus } from '@/api/types';
 import { inr, PAYMENT_LABELS, paymentColor, STATUS_LABELS, statusColor } from '@/lib/format';
 import { useIsOnline } from '@/hooks/useOnline';
 import { useConfig } from '@/hooks/useConfig';
+import { isGuestActive } from '@/guest/session';
+import { GuestBanner } from '@/guest/GuestBanner';
 
 export function PageHeader({ title, subtitle, actions, back }: { title: ReactNode; subtitle?: ReactNode; actions?: ReactNode; back?: ReactNode }) {
   return (
@@ -213,6 +215,7 @@ export function ConfirmDialog({
 /** Persistent label shown whenever simulated integrations are active. */
 export function SandboxBanner({ compact }: { compact?: boolean }) {
   const { data } = useConfig();
+  if (isGuestActive()) return <GuestBanner />;
   if (!data || (!data.payments.sandbox && !data.sms.sandbox)) return null;
   const parts = [data.payments.sandbox && 'payments', data.sms.sandbox && 'SMS', data.maps.provider === 'sandbox' && 'maps'].filter(Boolean).join(', ');
   return (

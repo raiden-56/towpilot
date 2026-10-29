@@ -9,6 +9,7 @@ import { LoadingBlock } from '@/components/common';
 import { Brand } from '@/layouts/shared';
 import { dateTime, relative, time } from '@/lib/format';
 import { brand } from '@/theme';
+import { isGuestActive } from '@/guest/session';
 
 interface Shared {
   code: string;
@@ -32,6 +33,7 @@ export default function TrackShared() {
   const q = useQuery({ queryKey: ['shared', token], queryFn: () => api.get<Shared>(`/public/track/${token}`), refetchInterval: 30_000, retry: false });
 
   useEffect(() => {
+    if (isGuestActive()) return; // guest mode has no server; the 30 s poll is answered locally
     const s = io({ path: '/socket.io', auth: { shareToken: token }, transports: ['websocket', 'polling'] });
     s.on('event', () => qc.invalidateQueries({ queryKey: ['shared', token] }));
     return () => void s.disconnect();

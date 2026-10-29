@@ -3,6 +3,7 @@ import { io, type Socket } from 'socket.io-client';
 import { useQueryClient } from '@tanstack/react-query';
 import { tokenStore, refreshSession } from '@/api/client';
 import { setSocketConnected, useAppDispatch, useAppSelector } from '@/store';
+import { isGuestActive } from '@/guest/session';
 
 export interface RealtimeEvent<T = Record<string, unknown>> {
   id: string;
@@ -61,6 +62,11 @@ export function useRealtimeConnection() {
 
   useEffect(() => {
     if (status !== 'authenticated' || !userId) return;
+    if (isGuestActive()) {
+      // Guest mode has no server: screens refresh via their polling, which the local mock answers.
+      dispatch(setSocketConnected(true));
+      return () => void dispatch(setSocketConnected(false));
+    }
     const s = io({ path: '/socket.io', auth: (cb) => cb({ token: tokenStore.get() }), transports: ['websocket', 'polling'], reconnectionDelayMax: 10_000 });
     socket = s;
     s.on('connect', () => {
